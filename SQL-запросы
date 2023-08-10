@@ -1,0 +1,102 @@
+/*1. Написать хранимую процедуру, которая показывает количество 
+взятых книг по каждой из групп, и по каждой из кафедр (Departments)*/
+ALTER PROCEDURE NumBooksTaken AS
+SELECT G.name AS GroupName, D.name AS DepartmentName, 
+		COUNT(SC.id) AS BooksCount
+FROM [Group] G
+JOIN Department D ON G.id_department=D.id
+LEFT JOIN Student S ON G.id=S.id_group
+LEFT JOIN S_Cards SC ON SC.id_student=SC.id AND SC.date_in IS NULL
+GROUP BY G.name, D.name
+ORDER BY D.name, G.name
+
+EXEC NumBooksTaken
+
+/*2 - Написать хранимую процедуру, показывающую список книг, отвечающих набору критериев. 
+Критерии: имя автора, фамилия автора, тематика, категория. 
+Кроме того, список должен быть отсортирован по номеру поля, указанному в 5-м параметре, 
+в направлении, указанном в 6-м параметре (sp_executesql)*/
+DROP PROCEDURE BooksListSorted
+CREATE PROCEDURE BooksListSorted
+	@authorName nvarchar(50),
+	@authorSurname nvarchar(50),
+	@theme nvarchar(50),
+	@category nvarchar(50),
+	@sortField nvarchar(50),
+	@sortDirection nvarchar(4) 
+AS
+BEGIN
+	DECLARE @sql nvarchar(MAX);
+	SET @sql = N'
+		SELECT B.name AS BookName, A.name AS AuthorName, A.surname AS AuthorSurname,
+		T.name AS Theme,  C.name AS Category
+		FROM Book B
+		JOIN Author A ON B.id_author = A.id
+		JOIN Theme T ON B.id_theme=T.id
+		JOIN Category C ON B.id_category=C.id
+		WHERE (A.name = @pauthorName OR @pauthorName IS NULL)
+		AND (A.surname = @pauthorSurname OR @pauthorSurname IS NULL)
+		AND (T.name = @ptheme OR @ptheme IS NULL)
+		AND (C.name = @pcategory OR @pcategory IS NULL)
+		ORDER BY ' +QUOTENAME(@sortField)+ ' ' + @sortDirection + ';'
+
+	EXEC sp_executesql @sql,
+        N'@pauthorName nvarchar(50), @pauthorSurname nvarchar(50),
+          @ptheme nvarchar(50), @pcategory nvarchar(50)',
+        @pauthorName = @authorName,
+        @pauthorSurname = @authorSurname,
+        @ptheme = @theme,
+        @pcategory = @category;
+END;
+
+SELECT * FROM Book
+SELECT * FROM Author
+SELECT * FROM Theme
+SElECT * FROM Category
+DECLARE @authorName nvarchar(50) = 'Людмила';
+DECLARE @authorSurname nvarchar(50) = 'Омельченко';
+DECLARE @theme nvarchar(50) = 'Базы данных';
+DECLARE @category nvarchar(50) = 'Visual FoxPro';
+DECLARE @sortField nvarchar(50) = @autorName;
+DECLARE @sortDirection nvarchar(4) = 'ASC';
+
+EXEC BooksListSorted
+    @authorName,
+    @authorSurname,
+    @theme,
+    @category,
+    @sortField,
+    @sortDirection;
+
+/*3- Написать хранимую процедуру, которая показывает список библиотекарей, и количество выданных каждым из них книг*/
+CREATE PROCEDURE LibrariansBooksCount
+AS
+  SELECT L.id AS LibrarianID, L.first_name AS LibrarianFirstName, L.last_name AS LibrarianLastName,
+        COUNT(SC.id) AS BooksCount
+  FROM Librarian L
+  LEFT JOIN S_Cards SC ON L.id = SC.id_librarian AND SC.date_in IS NULL
+  GROUP BY L.id, L.first_name, L.last_name
+  ORDER BY L.last_name, L.first_name;
+
+EXEC LibrariansBooksCount
+
+/*4-Создать хранимую процедуру, которая покажет имя и фамилию студента, набравшего наибольшее количество книг*/
+CREATE PROCEDURE StudentWithMostBooks
+AS
+  SELECT TOP 1 S.first_name AS StudentFirstName, S.last_name AS StudentLastName,
+           COUNT(SC.id) AS BooksCount
+  FROM Student S
+  LEFT JOIN S_Cards SC ON S.id = SC.id_student AND SC.date_in IS NULL
+  GROUP BY S.id, S.first_name, S.last_name
+  ORDER BY COUNT(SC.id) DESC;
+
+EXEC StudentWithMostBooks
+
+/*5-Создание хранимой процедуры, которая вернёт общее количество взятых из библиотеки книг и преподавателями, и студентами*/
+CREATE PROCEDURE TotalBooksTaken
+AS
+  SELECT
+    (SELECT COUNT(SC.id) FROM S_Cards SC WHERE SC.date_in IS NULL) AS TotalBooksTakenByStudents,
+    (SELECT COUNT(TC.id) FROM T_Cards TC WHERE TC.date_in IS NULL) AS TotalBooksTakenByTeachers
+
+EXEC TotalBooksTaken
